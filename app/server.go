@@ -7,40 +7,47 @@ import (
 	"os"
 )
 
+func exitWithError(err error) {
+	fmt.Println(err.Error())
+	os.Exit(1)
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
-
-	// Uncomment this block to pass the first stage
-	//
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
-		os.Exit(1)
+		exitWithError(fmt.Errorf("failed to bind to port 6379: %v", err))
 	}
-
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	b := make([]byte, 2056)
 
 	for {
-		n, err := conn.Read(b)
+		conn, err := l.Accept()
 		if err != nil {
-			if err != io.EOF {
-				fmt.Println("Error reading from stream", err.Error())
-				os.Exit(1)
-			}
+			exitWithError(fmt.Errorf("Error accepting connection: %v", err))
+		}
+
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	for {
+		b := make([]byte, 2056)
+		_, err := conn.Read(b)
+
+		if err == io.EOF {
 			break
 		}
 
-		fmt.Println(conn.RemoteAddr())
-		fmt.Println(n, b)
-		fmt.Println(string(b[:]))
-	}
+		if err != nil {
+			exitWithError(fmt.Errorf("Error reading from stream %v", err))
+		}
 
+		_, err = conn.Write([]byte("+PONG\r\n"))
+		if err != nil {
+			exitWithError(fmt.Errorf("Error writing to conneciton %v", err))
+		}
+	}
 }
